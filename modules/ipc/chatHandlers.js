@@ -3,6 +3,7 @@ const { ipcMain, dialog, BrowserWindow } = require('electron');
 const fs = require('fs-extra');
 const path = require('path');
 const contextSanitizer = require('../contextSanitizer');
+const ChatSyncManager = require('../chatSync');
 
 /**
  * Initializes chat and topic related IPC handlers.
@@ -18,6 +19,14 @@ const contextSanitizer = require('../contextSanitizer');
  */
 function initialize(mainWindow, context) {
     const { AGENT_DIR, USER_DATA_DIR, APP_DATA_ROOT_IN_PROJECT, NOTES_AGENT_ID, getMusicState, fileWatcher, agentConfigManager } = context;
+
+    // Initialize ChatSyncManager
+    const chatSync = new ChatSyncManager({ userDataDir: USER_DATA_DIR });
+    const syncConfigPath = path.join(APP_DATA_ROOT_IN_PROJECT || USER_DATA_DIR, 'chat-sync-config.json');
+    fs.readJson(syncConfigPath).then(cfg => {
+        chatSync.configure(cfg);
+        if (cfg.enabled) console.log('[ChatSync] 同步已启用');
+    }).catch(() => {});
 
     // Ensure the watcher is in a clean state on initialization
     if (fileWatcher) {
@@ -209,6 +218,8 @@ function initialize(mainWindow, context) {
             await fs.ensureDir(historyDir);
             const historyFile = path.join(historyDir, 'history.json');
             await fs.writeJson(historyFile, history, { spaces: 2 });
+            // 后台异步同步（不阻塞保存操作）
+            chatSync.backgroundSync(agentId, topicId).catch(() => {});
             return { success: true };
         } catch (error) {
             console.error(`保存Agent ${agentId} 话题 ${topicId} 聊天历史失败:`, error);
@@ -539,7 +550,8 @@ function initialize(mainWindow, context) {
             return { success: false, error: error.message };
         }
     });
-ipcMain.handle('get-original-message-content', async (event, itemId, itemType, topicId, messageId) => {
+
+    ipcMain.handle('get-original-message-content', async (event, itemId, itemType, topicId, messageId) => {
         if (!itemId || !itemType || !topicId || !messageId) {
             return { success: false, error: '无效的参数' };
         }
@@ -956,7 +968,6 @@ ipcMain.handle('get-original-message-content', async (event, itemId, itemType, t
         }
     });
 
-
     ipcMain.handle('interrupt-vcp-request', async (event, { messageId }) => {
         try {
             const settingsPath = path.join(APP_DATA_ROOT_IN_PROJECT, 'settings.json');
@@ -1200,6 +1211,44 @@ ipcMain.handle('get-original-message-content', async (event, itemId, itemType, t
             console.error('[setTopicUnread] Error:', error);
             return { success: false, error: error.message };
         }
+    });
+
+    // ---- ChatSync IPC Handlers ----
+    ipcMain.handle('chat-sync-configure', async (event, syncCfg) => {
+        try {
+            chatSync.configure(syncCfg);
+            await fs.ensureDir(path.dirname(syncConfigPath));
+            await fs.writeJson(syncConfigPath, {
+                baseUrl: chatSync.baseUrl,
+                adminUsername: chatSync.adminUsername,
+                adminPassword: chatSync.adminPassword,
+                enabled: chatSync.enabled,
+            }, { spaces: 2 });
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('chat-sync-status', async () => {
+        return chatSync.checkStatus();
+    });
+
+    ipcMain.handle('chat-sync-topic', async (event, agentId, topicId) => {
+        return chatSync.syncTopic(agentId, topicId);
+    });
+
+    ipcMain.handle('chat-sync-agent', async (event, agentId, topics) => {
+        return chatSync.syncAgent(agentId, topics);
+    });
+
+    ipcMain.handle('chat-sync-get-config', async () => {
+        return {
+            baseUrl: chatSync.baseUrl,
+            adminUsername: chatSync.adminUsername,
+            adminPassword: chatSync.adminPassword,
+            enabled: chatSync.enabled,
+        };
     });
 }
 

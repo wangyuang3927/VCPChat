@@ -160,7 +160,7 @@ function startAudioEngine() {
         console.log(`[Main] Starting Python Audio Engine from: ${scriptPath}`);
 
         const args = ['-u', scriptPath, '--resample-cache-dir', RESAMPLE_CACHE_DIR];
-        audioEngineProcess = spawn('python', args);
+        audioEngineProcess = spawn('python3', args);
 
         const readyTimeout = setTimeout(() => {
             console.error('[Main] Audio Engine failed to start within 15 seconds.');
@@ -936,7 +936,7 @@ if (!gotTheLock) {
     ipcMain.handle('execute-python-code', (event, code) => {
         return new Promise((resolve) => {
             // Use '-u' for unbuffered output and set PYTHONIOENCODING for proper UTF-8 handling
-            const pythonProcess = spawn('python', ['-u'], {
+            const pythonProcess = spawn('python3', ['-u'], {
                 env: { ...process.env, PYTHONIOENCODING: 'UTF-8' },
                 maxBuffer: 10 * 1024 * 1024 // Increase buffer to 10MB
             });

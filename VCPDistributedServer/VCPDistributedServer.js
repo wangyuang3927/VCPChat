@@ -79,7 +79,7 @@ class DistributedServer {
             return;
         }
         if (!this.mainServerUrl || !this.vcpKey) {
-            console.error(`[${this.serverName}] Error: mainServerUrl or vcpKey is not configured. Cannot connect.`);
+            console.error(`[${this.serverName}] Error: mainServerUrl: http://localhost:6005, vcpKey: aBcDeFgHiJkLmNoP. Cannot connect.`);
             return;
         }
 

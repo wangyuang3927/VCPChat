@@ -139,26 +139,40 @@ async function storeFile(sourcePathOrBuffer, originalName, agentId, topicId, fil
 }
 
 // Placeholder for future functions
-async function getFileAsBase64(internalPath) {
+async function getFileAsBase64(internalPath, forceRaw = false) {
     try {
         if (!internalPath || !internalPath.startsWith('file://')) {
             throw new Error('无效的内部路径格式。必须是 file:// URL。');
         }
         
-        // 直接根据用户反馈和日志进行路径清理
-        // 'file:///H:/...' -> 'H:/...'
         let cleanPath = decodeURIComponent(internalPath.replace(/^file:\/\//, ''));
         if (process.platform === 'win32' && cleanPath.startsWith('/')) {
             cleanPath = cleanPath.substring(1);
         }
 
-        console.log(`[Main - get-file-as-base64] Received raw filePath: "${internalPath}"`);
-        console.log(`[Main - get-file-as-base64] Cleaned path: "${cleanPath}"`);
-
         if (!await fs.pathExists(cleanPath)) {
-            console.error(`[Main - get-file-as-base64] File not found at path: ${cleanPath}`);
             throw new Error(`文件未找到: ${cleanPath}`);
         }
+
+        const stats = await fs.stat(cleanPath);
+        const fileSizeMB = stats.size / (1024 * 1024);
+
+        // 核心优化：对于大型非图像文件（>10MB），不直接返回 Base64，而是返回路径
+        // 图像文件除外，因为大多数模型对图像 Base64 支持较好且通常较小
+        const ext = path.extname(cleanPath).toLowerCase();
+        const isImage = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+
+        if (!forceRaw && fileSizeMB > 10 && !isImage) {
+            console.log(`[FileManager] Large file detected (${fileSizeMB.toFixed(2)} MB), returning path instead of Base64 to prevent IPC crash.`);
+            return {
+                success: true,
+                isLargeFile: true,
+                filePath: cleanPath,
+                mimeType: getMimeType(cleanPath),
+                base64Frames: [] // 返回空，告知调用者使用路径
+            };
+        }
+
         const fileBuffer = await fs.readFile(cleanPath);
         const base64Data = fileBuffer.toString('base64');
         
@@ -169,6 +183,18 @@ async function getFileAsBase64(internalPath) {
     } catch (error) {
         console.error(`[FileManager] getFileAsBase64 函数出错，路径: ${internalPath}:`, error);
         return { success: false, error: error.message, base64Frames: [] };
+    }
+}
+
+// 辅助函数：根据路径获取 MIME
+function getMimeType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    switch (ext) {
+        case '.mp4': return 'video/mp4';
+        case '.webm': return 'video/webm';
+        case '.mp3': return 'audio/mpeg';
+        case '.wav': return 'audio/wav';
+        default: return 'application/octet-stream';
     }
 }
 
@@ -249,6 +275,11 @@ async function getTextContent(internalFilePath, fileType) {
         }
     } else if (effectiveFileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         try {
+            const stats = await fs.stat(cleanPath);
+            if (stats.size > 20 * 1024 * 1024) { // 20MB limit for docx extraction
+                console.warn(`[FileManager] DOCX file ${cleanPath} too large for extraction, skipping.`);
+                return { text: `[文件过大 (${(stats.size / 1024 / 1024).toFixed(2)}MB)，已跳过文本提取]` };
+            }
             const dataBuffer = await fs.readFile(cleanPath);
             const mammoth = require('mammoth'); // Lazy load
             const result = await mammoth.extractRawText({ buffer: dataBuffer });

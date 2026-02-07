@@ -781,6 +781,15 @@ window.chatManager = (() => {
                     // --- IMAGE PROCESSING ---
                     const imageAttachmentsPromises = msg.attachments.map(async att => {
                         const fileManagerData = att._fileManagerData || {};
+                        
+                        // 限制图片大小，防止内存溢出
+                        const MAX_IMAGE_SIZE_MB = 10;
+                        if (att.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+                            console.warn(`[ChatManager] Image ${att.name} is too large (${(att.size / 1024 / 1024).toFixed(2)} MB), skipping Base64 encoding.`);
+                            uiHelper.showToastNotification(`图片 ${att.name} 过大，已跳过 OCR/识别。`, 'warning');
+                            return null;
+                        }
+
                         // Case 1: Scanned PDF converted to image frames
                         if (fileManagerData.imageFrames && fileManagerData.imageFrames.length > 0) {
                             return fileManagerData.imageFrames.map(frameData => ({
@@ -821,9 +830,30 @@ window.chatManager = (() => {
                     const audioAttachmentsPromises = msg.attachments
                         .filter(att => supportedAudioTypes.includes(att.type))
                         .map(async att => {
+                            // 限制音频大小，支持更大文件（如长录音总结）
+                            const MAX_AUDIO_SIZE_MB = 100;
+                            if (att.size > MAX_AUDIO_SIZE_MB * 1024 * 1024) {
+                                console.warn(`[ChatManager] Audio ${att.name} is too large (${(att.size / 1024 / 1024).toFixed(2)} MB), skipping Base64 encoding.`);
+                                uiHelper.showToastNotification(`音频 ${att.name} 超过 100MB，已跳过识别。`, 'warning');
+                                return null;
+                            }
+
+                            // 针对大音频显示处理提示
+                            if (att.size > 15 * 1024 * 1024) {
+                                uiHelper.showToastNotification(`正在处理大型音频 (${(att.size / 1024 / 1024).toFixed(2)} MB)... 注意：如遇闪退请压缩文件。`, 'info');
+                            }
+
                             try {
                                 const result = await electronAPI.getFileAsBase64(att.src);
                                 if (result && result.success) {
+                                    if (result.isLargeFile) {
+                                        // 处理大文件：传递路径而非 Base64
+                                        return [{
+                                            type: 'image_url', // Gemini 格式兼容性占位
+                                            image_url: { url: `vcp-file://${result.filePath}` },
+                                            _vcp_file_info: { path: result.filePath, mimeType: result.mimeType }
+                                        }];
+                                    }
                                     return result.base64Frames.map(frameData => ({
                                         type: 'image_url',
                                         image_url: { url: `data:${att.type};base64,${frameData}` }
@@ -847,9 +877,30 @@ window.chatManager = (() => {
                     const videoAttachmentsPromises = msg.attachments
                         .filter(att => att.type.startsWith('video/'))
                         .map(async att => {
+                            // 调整限制以支持更大文件，但需注意：超过 20MB 的视频通过 Base64 发送极易导致 API 报错或内存不稳定
+                            const MAX_VIDEO_SIZE_MB = 150; 
+                            if (att.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+                                console.warn(`[ChatManager] Video ${att.name} is too large (${(att.size / 1024 / 1024).toFixed(2)} MB), skipping Base64 encoding.`);
+                                uiHelper.showToastNotification(`视频 ${att.name} 超过 150MB，已降级为链接模式以保护内存。`, 'warning');
+                                return null;
+                            }
+
+                            // 针对大视频（>20MB）显示性能警告，并建议压缩
+                            if (att.size > 20 * 1024 * 1024) {
+                                uiHelper.showToastNotification(`正在处理大型视频 (${(att.size / 1024 / 1024).toFixed(2)} MB)... 注意：如果发生闪退，请尝试将视频压缩至 20MB 以内。`, 'info');
+                            }
+
                             try {
                                 const result = await electronAPI.getFileAsBase64(att.src);
                                 if (result && result.success) {
+                                    if (result.isLargeFile) {
+                                        // 处理大文件：传递路径而非 Base64
+                                        return [{
+                                            type: 'image_url', // Gemini 格式兼容性占位
+                                            image_url: { url: `vcp-file://${result.filePath}` },
+                                            _vcp_file_info: { path: result.filePath, mimeType: result.mimeType }
+                                        }];
+                                    }
                                     return result.base64Frames.map(frameData => ({
                                         type: 'image_url',
                                         image_url: { url: `data:${att.type};base64,${frameData}` }

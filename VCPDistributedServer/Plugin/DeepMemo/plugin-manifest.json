@@ -10,7 +10,7 @@
   },
   "entryPoint": {
     "type": "executable",
-    "command": "deepmemo_rust.exe"
+    "command": "node DeepMemo.js"
   },
   "capabilities": {
     "invocationCommands": [

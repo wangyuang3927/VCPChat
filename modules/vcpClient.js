@@ -54,7 +54,7 @@ async function sendToVCP(params) {
 
     let messages = [...originalMessages]; // 创建副本以避免修改原始数组
 
-    // === 数据验证和规范化 ===
+            // === 数据验证和规范化 ===
     try {
         messages = messages.map(msg => {
             if (!msg || typeof msg !== 'object') {
@@ -66,8 +66,7 @@ async function sendToVCP(params) {
                 if (msg.content.text) {
                     return { ...msg, content: String(msg.content.text) };
                 } else if (Array.isArray(msg.content)) {
-                    // Always keep content as an array for multimodal messages, even if it's just text.
-                    // This ensures consistency for endpoints that expect an array.
+                    // 保持数组格式，但优化大型文件的 Base64 负载（如果已在 chatManager 中处理为路径）
                     return msg;
                 } else {
                     console.warn('[VCPClient] Message content is object without text field, stringifying:', msg.content);

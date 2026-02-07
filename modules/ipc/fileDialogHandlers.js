@@ -190,8 +190,20 @@ function initialize(mainWindow, context) {
                 }
             } else { // Non-image file
                 console.log(`[Main - get-file-as-base64] Non-image file. Buffer length: ${originalFileBuffer.length}`);
+                
+                // 核心优化：避免在主进程中对大型非图像文件进行 Base64 编码，防止 OOM
+                if (originalFileBuffer.length > 10 * 1024 * 1024) {
+                    console.log(`[Main - get-file-as-base64] File too large for Base64 transfer (${originalFileBuffer.length} bytes). Returning path.`);
+                    return { 
+                        success: true, 
+                        isLargeFile: true, 
+                        filePath: cleanPath,
+                        mimeType: getMimeTypeFromExt(fileExtension),
+                        base64Frames: [] 
+                    };
+                }
+
                 const base64String = originalFileBuffer.toString('base64');
-                // This path is not expected to be hit for VCP messages, but we return a compatible format for robustness.
                 return { success: true, base64Frames: [base64String], isGif: false };
             }
     
@@ -337,6 +349,18 @@ function initialize(mainWindow, context) {
             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
         });
     });
+}
+
+function getMimeTypeFromExt(ext) {
+    switch (ext) {
+        case '.mp4': return 'video/mp4';
+        case '.webm': return 'video/webm';
+        case '.mp3': return 'audio/mpeg';
+        case '.wav': return 'audio/wav';
+        case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        case '.pdf': return 'application/pdf';
+        default: return 'application/octet-stream';
+    }
 }
 
 module.exports = {

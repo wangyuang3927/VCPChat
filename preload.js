@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('electron', {
     send: (channel, data) => {
         // whitelist channels
         let validChannels = [
-            'open-music-folder', 'open-music-window', 'save-music-playlist',
+            'open-music-folder', 'open-music-window', 'save-music-playlist', 'save-custom-playlists',
             'music-track-changed', 'music-renderer-ready', 'share-file-to-main'
         ];
         if (validChannels.includes(channel)) {
@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('electron', {
     },
     invoke: (channel, data) => {
         let validChannels = [
-            'get-music-playlist',
+            'get-music-playlist', 'get-custom-playlists',
             // 新增的HIFI引擎控制通道
             'music-load',
             'music-play',
@@ -76,11 +76,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAllItems: () => ipcRenderer.invoke('get-all-items'),
     importRegexRules: (agentId) => ipcRenderer.invoke('import-regex-rules', agentId),
     updateAgentConfig: (agentId, updates) => ipcRenderer.invoke('update-agent-config', agentId, updates),
-    
+
     // [新增] 为全局仓库添加IPC接口
     getGlobalWarehouse: () => ipcRenderer.invoke('get-global-warehouse'),
     saveGlobalWarehouse: (data) => ipcRenderer.invoke('save-global-warehouse', data),
-    
+
     // Prompt Modules
     loadPresetPrompts: (presetPath) => ipcRenderer.invoke('load-preset-prompts', presetPath),
     loadPresetContent: (filePath) => ipcRenderer.invoke('load-preset-content', filePath),
@@ -145,7 +145,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Open Translator Window
     openTranslatorWindow: (theme) => ipcRenderer.invoke('open-translator-window', theme),
     openRAGObserverWindow: () => ipcRenderer.invoke('open-rag-observer-window'), // 新增：打开RAG Observer窗口
- 
+
     // Agent and Topic Order
     saveAgentOrder: (orderedAgentIds) => ipcRenderer.invoke('save-agent-order', orderedAgentIds),
     saveTopicOrder: (agentId, orderedTopicIds) => ipcRenderer.invoke('save-topic-order', agentId, orderedTopicIds),
@@ -177,7 +177,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     inviteAgentToSpeak: (groupId, topicId, invitedAgentId) => ipcRenderer.invoke('inviteAgentToSpeak', groupId, topicId, invitedAgentId), // 新增：邀请Agent发言
     redoGroupChatMessage: (groupId, topicId, messageId, agentId) => ipcRenderer.invoke('redo-group-chat-message', groupId, topicId, messageId, agentId), // 新增：重新生成群聊消息
     interruptGroupRequest: (messageId) => ipcRenderer.invoke('interrupt-group-request', messageId), // 新增：中断群聊消息
- 
+
     exportTopicAsMarkdown: (exportData) => ipcRenderer.invoke('export-topic-as-markdown', exportData), // 新增：导出话题功能
     // VCPLog Notifications
     connectVCPLog: (url, key) => ipcRenderer.send('connect-vcplog', { url, key }),
@@ -228,17 +228,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeWindow: () => ipcRenderer.send('close-window'),
     hideWindow: () => ipcRenderer.send('hide-window'),
     openDevTools: () => ipcRenderer.send('open-dev-tools'),
-    sendToggleNotificationsSidebar: () => ipcRenderer.send('toggle-notifications-sidebar'), 
-    onDoToggleNotificationsSidebar: (callback) => ipcRenderer.on('do-toggle-notifications-sidebar', (_event) => callback()), 
-    openAdminPanel: () => ipcRenderer.invoke('open-admin-panel'), 
+    sendToggleNotificationsSidebar: () => ipcRenderer.send('toggle-notifications-sidebar'),
+    onDoToggleNotificationsSidebar: (callback) => ipcRenderer.on('do-toggle-notifications-sidebar', (_event) => callback()),
+    openAdminPanel: () => ipcRenderer.invoke('open-admin-panel'),
     onWindowMaximized: (callback) => ipcRenderer.on('window-maximized', (_event) => callback()),
     onWindowUnmaximized: (callback) => ipcRenderer.on('window-unmaximized', (_event) => callback()),
     minimizeToTray: () => ipcRenderer.send('minimize-to-tray'),
     // Splash Screen Close
     closeApp: () => ipcRenderer.send('close-app'),
- 
-     // Image Context Menu
-     showImageContextMenu: (imageUrl) => ipcRenderer.send('show-image-context-menu', imageUrl),
+
+    // Image Context Menu
+    showImageContextMenu: (imageUrl) => ipcRenderer.send('show-image-context-menu', imageUrl),
     // Open Image in New Window
     openImageViewer: (data) => ipcRenderer.send('open-image-viewer', data), // { src, title, theme }
     // Open Text in New Window (Read Mode)
@@ -279,7 +279,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openThemesWindow: () => ipcRenderer.send('open-themes-window'),
     getThemes: () => ipcRenderer.invoke('get-themes'),
     applyTheme: (fileName) => ipcRenderer.send('apply-theme', fileName),
-   getWallpaperThumbnail: (path) => ipcRenderer.invoke('get-wallpaper-thumbnail', path),
+    getWallpaperThumbnail: (path) => ipcRenderer.invoke('get-wallpaper-thumbnail', path),
 
     removeVcpStreamChunkListener: (callback) => ipcRenderer.removeListener('vcp-stream-chunk', callback),
 
@@ -346,7 +346,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Watcher controls
     watcherStart: (filePath, agentId, topicId) => ipcRenderer.invoke('watcher:start', filePath, agentId, topicId),
     watcherStop: () => ipcRenderer.invoke('watcher:stop'),
-    
+
     // Flowlock Control - for AI to control flowlock like a human user
     onFlowlockCommand: (callback) => ipcRenderer.on('flowlock-command', (_event, data) => callback(data)),
     sendFlowlockResponse: (data) => ipcRenderer.send('flowlock-response', data),
@@ -361,13 +361,13 @@ const electronAPIForLogging = {
     saveChatHistory: "function", handleFilePaste: "function", selectFilesToSend: "function",
     getFileAsBase64: "function", getTextContent: "function", handleTextPasteAsFile: "function",
     handleFileDrop: "function",
-    readTxtNotes: "function", 
-    writeTxtNote: "function", 
-    deleteTxtNote: "function", 
+    readTxtNotes: "function",
+    writeTxtNote: "function",
+    deleteTxtNote: "function",
     openNotesWindow: "function",
-    openNotesWithContent: "function", 
-    saveAgentOrder: "function", 
-    saveTopicOrder: "function", 
+    openNotesWithContent: "function",
+    saveAgentOrder: "function",
+    saveTopicOrder: "function",
     sendToVCP: "function", onVCPStreamChunk: "function",
     connectVCPLog: "function", disconnectVCPLog: "function", onVCPLogMessage: "function",
     onVCPLogStatus: "function", readImageFromClipboard: "function", readTextFromClipboard: "function",

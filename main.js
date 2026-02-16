@@ -169,7 +169,7 @@ function startAudioEngine() {
             return;
         }
 
-        const args = ['--port', '5555'];
+        const args = ['--port', '63789'];
         audioEngineProcess = spawn(rustBinaryPath, args);
 
         const readyTimeout = setTimeout(() => {

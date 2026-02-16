@@ -31,6 +31,10 @@ cd H:\VCP\VCPChat\rust_audio_engine && set PATH=H:\VCP\vcpkg\installed\x64-windo
 ```cmd
 cd rust_audio_engine && set PATH=H:\VCP\vcpkg\installed\x64-windows-static\tools\pkgconf;%PATH% && set "PKG_CONFIG_PATH=H:\VCP\vcpkg\installed\x64-windows-static\lib\pkgconfig" && set RUSTFLAGS=-C target-cpu=native && cargo build --release
 ```
+```
+$env:PATH = "H:\VCP\vcpkg\installed\x64-windows-static\tools\pkgconf;$env:PATH"; $env:PKG_CONFIG_PATH = "H:\VCP\vcpkg\installed\x64-windows-static\lib\pkgconfig"; $env:RUSTFLAGS = "-C target-cpu=native"; cargo build --release
+```
+
 
 ## 关键技术点
 

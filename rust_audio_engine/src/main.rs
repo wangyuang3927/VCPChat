@@ -7,6 +7,9 @@ mod player;
 mod processor;
 mod server;
 mod config;
+mod pipeline;
+#[cfg(windows)]
+mod wasapi_output;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -25,7 +28,7 @@ async fn main() -> std::io::Result<()> {
         .position(|a| a == "--port")
         .and_then(|i| args.get(i + 1))
         .and_then(|p| p.parse().ok())
-        .unwrap_or(5555);
+        .unwrap_or(63789);
     
     // Load config
     let config = crate::config::AppConfig::load();

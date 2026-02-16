@@ -8,11 +8,15 @@ pub mod player;
 pub mod processor;
 pub mod server;
 pub mod config;
+pub mod pipeline;
+#[cfg(windows)]
+pub mod wasapi_output;
 
 // Re-exports for convenience
 pub use decoder::StreamingDecoder;
 pub use player::{AudioPlayer, PlayerState, AudioDeviceInfo};
-pub use processor::{Resampler, Equalizer, VolumeController, NoiseShaper, SpectrumAnalyzer, FFTConvolver};
+pub use processor::{Resampler, StreamingResampler, Equalizer, VolumeController, NoiseShaper, SpectrumAnalyzer, FFTConvolver};
+pub use pipeline::AudioPipeline;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

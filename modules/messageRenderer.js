@@ -41,6 +41,7 @@ const MERMAID_CODE_REGEX = /<code.*?>\s*(flowchart|graph|mermaid)\s+([\s\S]*?)<\
 const MERMAID_FENCE_REGEX = /```(mermaid|flowchart|graph)\n([\s\S]*?)```/g;
 const CODE_FENCE_REGEX = /```\w*([\s\S]*?)```/g;
 const THOUGHT_CHAIN_REGEX = /\[--- VCP元思考链(?::\s*"([^"]*)")?\s*---\]([\s\S]*?)\[--- 元思考链结束 ---\]/gs;
+const CONVENTIONAL_THOUGHT_REGEX = /<think>([\s\S]*?)<\/think>/gi;
 
 
 // --- Enhanced Rendering Styles (from UserScript) ---
@@ -465,7 +466,7 @@ function transformSpecialBlocks(text) {
     });
 
     // Process VCP Thought Chains
-    processed = processed.replace(THOUGHT_CHAIN_REGEX, (match, theme, rawContent) => {
+    const renderThoughtChain = (theme, rawContent) => {
         const displayTheme = theme ? theme.trim() : "元思考链";
         const content = rawContent.trim();
         const escapedContent = escapeHtml(content);
@@ -495,6 +496,15 @@ function transformSpecialBlocks(text) {
         html += `</div>`; // End of vcp-thought-chain-bubble
 
         return html;
+    };
+
+    processed = processed.replace(THOUGHT_CHAIN_REGEX, (match, theme, rawContent) => {
+        return renderThoughtChain(theme, rawContent);
+    });
+
+    // Process Conventional Thought Chains (<think>...</think>)
+    processed = processed.replace(CONVENTIONAL_THOUGHT_REGEX, (match, rawContent) => {
+        return renderThoughtChain("思维链", rawContent);
     });
 
     return processed;

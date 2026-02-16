@@ -268,6 +268,8 @@ async fn configure_output(
     
     if let Some(exclusive) = body.exclusive {
         player.exclusive_mode = exclusive;
+        // Sync to SharedState so audio thread can read it
+        player.shared_state().exclusive_mode.store(exclusive, std::sync::atomic::Ordering::Relaxed);
     }
     
     HttpResponse::Ok().json(ApiResponse::success_with_state(

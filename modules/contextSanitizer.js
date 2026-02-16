@@ -204,7 +204,8 @@ class ContextSanitizer {
     stripThoughtChains(content) {
         if (typeof content !== 'string') return content;
         const THOUGHT_CHAIN_REGEX = /\[--- VCP元思考链(?::\s*"([^"]*)")?\s*---\][\s\S]*?\[--- 元思考链结束 ---\]/gs;
-        return content.replace(THOUGHT_CHAIN_REGEX, '');
+        const CONVENTIONAL_THOUGHT_REGEX = /<think>[\s\S]*?<\/think>/gi;
+        return content.replace(THOUGHT_CHAIN_REGEX, '').replace(CONVENTIONAL_THOUGHT_REGEX, '');
     }
 
     /**

@@ -106,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let modalSearchQuery = ''; // Search filter for modal
     let lastModalClickIndex = -1; // For shift-select in modal
     let currentFilteredTracks = null; // Active playlist tracks for shuffle scope
+    let shuffleQueue = [];
+    let lastShuffleList = null;
 
     const eqBands = {
         '31': 0, '62': 0, '125': 0, '250': 0, '500': 0,
@@ -173,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Replaced socket.io with native WebSocket for Rust server compatibility
     let ws = null;
     const connectWebSocket = () => {
-        ws = new WebSocket("ws://127.0.0.1:5555/ws");
+        ws = new WebSocket("ws://127.0.0.1:63789/ws");
 
         ws.onopen = () => {
             console.log('[Music.js] Connected to Rust Audio Engine via WebSocket.');
@@ -359,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const defaultArtUrl = `url('../assets/${currentTheme === 'light' ? 'musiclight.jpeg' : 'musicdark.jpeg'}')`;
             albumArt.style.backgroundImage = defaultArtUrl;
             updateBlurredBackground('none'); // 没有歌曲时，回退到全局背景
-            renderPlaylist();
+            renderPlaylist(currentFilteredTracks);
             return;
         }
 
@@ -385,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateBlurredBackground('none'); // 没有封面时，回退到全局背景
         }
 
-        renderPlaylist();
+        renderPlaylist(currentFilteredTracks);
         fetchAndDisplayLyrics(track.artist, track.title);
         updateMediaSessionMetadata(); // Update OS media controls
         if (wnpAdapter) wnpAdapter.sendUpdate();
@@ -446,6 +448,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Use filtered tracks if a playlist is active, otherwise use all tracks
         const activeList = currentFilteredTracks || playlist;
 
+        // Reset shuffle queue if the active list has changed
+        if (lastShuffleList !== activeList) {
+            shuffleQueue = [];
+            lastShuffleList = activeList;
+        }
+
         if (activeList.length <= 1) {
             if (activeList.length === 1) {
                 const track = activeList[0];
@@ -473,12 +481,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 引擎会在播放结束时停止，我们需要在这里重新加载并播放
                 break;
             case 'shuffle':
-                let nextRandom;
-                do {
-                    const randomPos = Math.floor(Math.random() * activeList.length);
-                    nextRandom = playlist.indexOf(activeList[randomPos]);
-                } while (activeList.length > 1 && nextRandom === currentTrackIndex);
-                currentTrackIndex = nextRandom;
+                // If queue is empty, refill it with all indices from activeList
+                if (shuffleQueue.length === 0) {
+                    shuffleQueue = Array.from({ length: activeList.length }, (_, i) => i);
+                    // Fisher-Yates shuffle algorithm
+                    for (let i = shuffleQueue.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffleQueue[i], shuffleQueue[j]] = [shuffleQueue[j], shuffleQueue[i]];
+                    }
+                    
+                    // Avoid playing the same song again immediately if it's the first in the new queue
+                    if (shuffleQueue.length > 1) {
+                        const firstTrack = activeList[shuffleQueue[0]];
+                        if (playlist.indexOf(firstTrack) === currentTrackIndex) {
+                            // Move the first element to the end
+                            shuffleQueue.push(shuffleQueue.shift());
+                        }
+                    }
+                }
+                
+                const nextIndexInActive = shuffleQueue.shift();
+                const selectedTrack = activeList[nextIndexInActive];
+                currentTrackIndex = playlist.indexOf(selectedTrack);
                 break;
         }
         loadTrack(currentTrackIndex);
@@ -824,6 +848,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     modeBtn.addEventListener('click', () => {
         currentPlayMode = (currentPlayMode + 1) % playModes.length;
+        // Reset shuffle queue when switching to shuffle mode to ensure a fresh sequence
+        if (playModes[currentPlayMode] === 'shuffle') {
+            shuffleQueue = [];
+        }
         updateModeButton();
         if (wnpAdapter) wnpAdapter.sendUpdate();
     });
@@ -840,6 +868,8 @@ document.addEventListener('DOMContentLoaded', () => {
     playlistEl.addEventListener('click', (e) => {
         if (e.target.tagName === 'LI') {
             const index = parseInt(e.target.dataset.index, 10);
+            // Reset shuffle queue on manual selection to start a new sequence from this song
+            shuffleQueue = [];
             loadTrack(index);
         }
     });
@@ -848,7 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchTerm = e.target.value.toLowerCase();
         const filteredPlaylist = playlist.filter(track =>
             (track.title || '').toLowerCase().includes(searchTerm) ||
-            (track.artist || '').toLowerCase().includes(searchTerm)
+            (track.artist || '').toLowerCase().includes(searchTerm) ||
+            (track.album || '').toLowerCase().includes(searchTerm)
         );
         renderPlaylist(filteredPlaylist);
     });
@@ -1147,6 +1178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const trackIndex = playlist.findIndex(t => t.path === track.path);
             if (trackIndex !== -1) {
+                shuffleQueue = []; // Reset shuffle on external track change
                 loadTrack(trackIndex, true); // Load and play the track
             }
         });
@@ -1644,6 +1676,33 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     };
+    const addSelectedTracksToPlaylist = (playlistId) => {
+        const pl = customPlaylists.find(p => p.id === playlistId);
+        if (!pl || contextMenuTrackIndex === null) return;
+
+        const track = playlist[contextMenuTrackIndex];
+        if (!track) return;
+
+        if (pl.tracks.includes(track.path)) {
+            alert(`歌曲 "${track.title || '未知标题'}" 已在歌单 "${pl.name}" 中`);
+            return;
+        }
+
+        pl.tracks.push(track.path);
+        saveCustomPlaylists();
+        
+        // 如果当前正在查看该歌单，则刷新显示
+        if (filteredPlaylistSource?.type === 'playlist' && filteredPlaylistSource.id === playlistId) {
+            const tracks = pl.tracks.map(path => playlist.find(t => t.path === path)).filter(Boolean);
+            renderPlaylist(tracks);
+        }
+        
+        // 刷新侧边栏以更新歌曲计数
+        if (currentSidebarView === 'playlists') {
+            renderSidebarContent('playlists');
+        }
+    };
+
 
     // ===== PLAYLIST EDIT MODAL FUNCTIONS =====
 
@@ -1681,7 +1740,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredTracks = query
             ? playlist.filter(t =>
                 (t.title || '').toLowerCase().includes(query) ||
-                (t.artist || '').toLowerCase().includes(query)
+                (t.artist || '').toLowerCase().includes(query) ||
+                (t.album || '').toLowerCase().includes(query)
             )
             : playlist;
 
@@ -1820,10 +1880,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = item.dataset.action;
             if (!action) return;
 
+            // Capture the index immediately to avoid issues with async callbacks
+            const trackIndex = contextMenuTrackIndex;
+
             switch (action) {
                 case 'play':
-                    if (contextMenuTrackIndex !== null) {
-                        loadTrack(contextMenuTrackIndex);
+                    if (trackIndex !== null) {
+                        shuffleQueue = []; // Reset shuffle on manual selection
+                        loadTrack(trackIndex);
                     }
                     break;
                 case 'play-next':
@@ -1831,7 +1895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'create-playlist-add':
                     showPlaylistDialog((newPlaylist) => {
-                        const track = playlist[contextMenuTrackIndex];
+                        const track = playlist[trackIndex];
                         if (track && !newPlaylist.tracks.includes(track.path)) {
                             newPlaylist.tracks.push(track.path);
                             saveCustomPlaylists();
@@ -1841,7 +1905,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'remove-from-list':
                     if (filteredPlaylistSource?.type === 'playlist') {
                         const pl = customPlaylists.find(p => p.id === filteredPlaylistSource.id);
-                        const track = playlist[contextMenuTrackIndex];
+                        const track = playlist[trackIndex];
                         if (pl && track) {
                             pl.tracks = pl.tracks.filter(path => path !== track.path);
                             saveCustomPlaylists();

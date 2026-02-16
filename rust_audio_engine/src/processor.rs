@@ -131,6 +131,140 @@ impl Resampler {
     }
 }
 
+/// Stateful streaming resampler that maintains SoX instances across chunks.
+/// This is used by AudioPipeline for memory-efficient streaming resampling.
+pub struct StreamingResampler {
+    soxr_instances: Vec<Soxr<Mono<f64>>>,
+    channels: usize,
+    from_rate: u32,
+    to_rate: u32,
+    output_scratch: Vec<f64>,
+}
+
+impl StreamingResampler {
+    /// Create a new streaming resampler
+    pub fn new(channels: usize, from_rate: u32, to_rate: u32) -> Self {
+        let soxr_instances: Vec<_> = (0..channels)
+            .map(|_| {
+                // Create params for each channel (they don't implement Clone)
+                let quality_spec = QualitySpec::configure(
+                    QualityRecipe::very_high(),
+                    Rolloff::default(),
+                    QualityFlags::HighPrecisionClock,
+                );
+                let runtime_spec = RuntimeSpec::new(1);
+                
+                Soxr::<Mono<f64>>::new_with_params(
+                    from_rate as f64,
+                    to_rate as f64,
+                    quality_spec,
+                    runtime_spec,
+                ).expect("Soxr initialization failed")
+            })
+            .collect();
+        
+        // Pre-allocate scratch buffer
+        let max_output_per_channel = 16384; // ~8192 input * 2x ratio max
+        
+        Self {
+            soxr_instances,
+            channels,
+            from_rate,
+            to_rate,
+            output_scratch: vec![0.0; max_output_per_channel],
+        }
+    }
+    
+    /// Process a chunk of interleaved audio, returning resampled interleaved output
+    pub fn process_chunk(&mut self, input: &[f64]) -> Vec<f64> {
+        if self.from_rate == self.to_rate {
+            return input.to_vec();
+        }
+        
+        let input_frames = input.len() / self.channels;
+        if input_frames == 0 {
+            return Vec::new();
+        }
+        
+        // De-interleave input
+        let mut channel_inputs: Vec<Vec<f64>> = vec![Vec::with_capacity(input_frames); self.channels];
+        for (i, &sample) in input.iter().enumerate() {
+            channel_inputs[i % self.channels].push(sample);
+        }
+        
+        // Process each channel
+        let mut channel_outputs: Vec<Vec<f64>> = Vec::with_capacity(self.channels);
+        
+        for (ch, channel_data) in channel_inputs.iter().enumerate() {
+            // Ensure scratch buffer is large enough
+            let expected_output = (channel_data.len() as f64 * self.to_rate as f64 / self.from_rate as f64).ceil() as usize + 64;
+            if self.output_scratch.len() < expected_output {
+                self.output_scratch.resize(expected_output, 0.0);
+            }
+            
+            let processed = self.soxr_instances[ch]
+                .process(channel_data, &mut self.output_scratch)
+                .expect("Resampling failed");
+            
+            channel_outputs.push(self.output_scratch[..processed.output_frames].to_vec());
+        }
+        
+        // Re-interleave
+        if channel_outputs.is_empty() || channel_outputs[0].is_empty() {
+            return Vec::new();
+        }
+        
+        let out_frames = channel_outputs[0].len();
+        let mut output = Vec::with_capacity(out_frames * self.channels);
+        
+        for f in 0..out_frames {
+            for ch in 0..self.channels {
+                output.push(channel_outputs[ch].get(f).copied().unwrap_or(0.0));
+            }
+        }
+        
+        output
+    }
+    
+    /// Flush any remaining samples in the resampler's internal buffers
+    pub fn flush(&mut self) -> Vec<f64> {
+        let mut channel_outputs: Vec<Vec<f64>> = Vec::with_capacity(self.channels);
+        
+        for ch in 0..self.channels {
+            let mut flush_output = vec![0.0; 4096];
+            let mut all_flushed = Vec::new();
+            
+            // Keep flushing until no more output
+            loop {
+                match self.soxr_instances[ch].process(&[], &mut flush_output) {
+                    Ok(processed) if processed.output_frames > 0 => {
+                        all_flushed.extend_from_slice(&flush_output[..processed.output_frames]);
+                    }
+                    _ => break,
+                }
+            }
+            
+            channel_outputs.push(all_flushed);
+        }
+        
+        // Re-interleave flushed data
+        if channel_outputs.is_empty() || channel_outputs.iter().all(|c| c.is_empty()) {
+            return Vec::new();
+        }
+        
+        let max_frames = channel_outputs.iter().map(|c| c.len()).max().unwrap_or(0);
+        let mut output = Vec::with_capacity(max_frames * self.channels);
+        
+        for f in 0..max_frames {
+            for ch in 0..self.channels {
+                output.push(channel_outputs[ch].get(f).copied().unwrap_or(0.0));
+            }
+        }
+        
+        output
+    }
+}
+
 /// IIR Biquad filter section (SOS - Second Order Section)
 #[derive(Clone)]
 pub struct BiquadSection {

@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const { Worker } = require('worker_threads');
 const lyricFetcher = require('../lyricFetcher'); // Import the new lyric fetcher
-const AUDIO_ENGINE_URL = 'http://127.0.0.1:5555';
+const AUDIO_ENGINE_URL = 'http://127.0.0.1:63789';
 let fetch;
 
 let musicWindow = null;

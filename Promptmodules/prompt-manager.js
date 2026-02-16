@@ -6,22 +6,22 @@ class PromptManager {
         this.currentMode = 'original'; // 'original' | 'modular' | 'preset'
         this.agentId = null;
         this.config = null;
-        
+
         // 模块实例
         this.originalModule = null;
         this.modularModule = null;
         this.presetModule = null;
-        
+
         // 默认模式名称
         this.defaultModeNames = {
             original: '原始富文本',
             modular: '模块化',
             preset: '临时与预制'
         };
-        
+
         // 自定义模式名称（从全局设置加载）
         this.customModeNames = {};
-        
+
         // 右键长按计时器
         this.rightClickTimer = null;
         this.rightClickDelay = 1000; // 1秒
@@ -127,49 +127,49 @@ class PromptManager {
             button.className = 'prompt-mode-button';
             button.dataset.mode = mode.id;
             button.textContent = this.getModeName(mode.id);
-            
+
             if (this.currentMode === mode.id) {
                 button.classList.add('active');
             }
 
             // 左键单击：切换模式
             button.addEventListener('click', () => this.switchMode(mode.id));
-            
+
             // 双击：进入编辑模式
             button.addEventListener('dblclick', (e) => {
                 e.preventDefault();
                 this.enterEditMode(button, mode.id);
             });
-            
+
             // 右键长按：恢复默认名称
             button.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 this.startRightClickTimer(mode.id);
             });
-            
+
             button.addEventListener('mouseup', (e) => {
                 if (e.button === 2) { // 右键
                     this.cancelRightClickTimer();
                 }
             });
-            
+
             button.addEventListener('mouseleave', () => {
                 this.cancelRightClickTimer();
             });
-            
+
             container.appendChild(button);
         });
 
         return container;
     }
-    
+
     /**
      * 获取模式名称（优先使用自定义名称）
      */
     getModeName(modeId) {
         return this.customModeNames[modeId] || this.defaultModeNames[modeId];
     }
-    
+
     /**
      * 加载自定义模式名称
      */
@@ -183,7 +183,7 @@ class PromptManager {
             console.error('[PromptManager] 加载自定义模式名称失败:', error);
         }
     }
-    
+
     /**
      * 保存自定义模式名称到全局设置
      */
@@ -199,13 +199,13 @@ class PromptManager {
             console.error('[PromptManager] 保存自定义模式名称失败:', error);
         }
     }
-    
+
     /**
      * 进入编辑模式
      */
     enterEditMode(button, modeId) {
         const currentName = button.textContent;
-        
+
         // 创建输入框
         const input = document.createElement('input');
         input.type = 'text';
@@ -224,13 +224,13 @@ class PromptManager {
             margin: 0;
             box-sizing: border-box;
         `;
-        
+
         // 替换按钮文本
         button.textContent = '';
         button.appendChild(input);
         input.focus();
         input.select();
-        
+
         // 保存函数
         const saveName = async () => {
             const newName = input.value.trim();
@@ -244,13 +244,13 @@ class PromptManager {
             }
             input.remove();
         };
-        
+
         // 取消函数
         const cancel = () => {
             button.textContent = currentName;
             input.remove();
         };
-        
+
         // 回车保存
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -261,35 +261,35 @@ class PromptManager {
                 cancel();
             }
         });
-        
+
         // 失去焦点保存
         input.addEventListener('blur', saveName);
     }
-    
+
     /**
      * 开始右键长按计时器
      */
     startRightClickTimer(modeId) {
         this.cancelRightClickTimer(); // 先取消之前的计时器
-        
+
         this.rightClickTimer = setTimeout(async () => {
             // 恢复默认名称
             delete this.customModeNames[modeId];
             await this.saveCustomModeNames();
-            
+
             // 更新UI
             const button = this.containerElement.querySelector(`.prompt-mode-button[data-mode="${modeId}"]`);
             if (button) {
                 button.textContent = this.defaultModeNames[modeId];
             }
-            
+
             // 显示提示
             if (window.uiHelperFunctions && window.uiHelperFunctions.showToastNotification) {
                 window.uiHelperFunctions.showToastNotification(`已恢复模式名称为"${this.defaultModeNames[modeId]}"`, 'success');
             }
         }, this.rightClickDelay);
     }
-    
+
     /**
      * 取消右键长按计时器
      */
@@ -307,14 +307,17 @@ class PromptManager {
     async switchMode(mode) {
         if (this.currentMode === mode) return;
 
+        // 【防竞态】在切换开始时锁定agentId，防止异步操作期间用户切换Agent导致写入错误目标
+        const lockedAgentId = this.agentId;
+
         // 保存当前模式的数据
         await this.saveCurrentModeData();
 
         // 更新模式
         this.currentMode = mode;
 
-        // 保存模式选择到配置
-        await this.electronAPI.updateAgentConfig(this.agentId, {
+        // 保存模式选择到配置（使用锁定的agentId）
+        await this.electronAPI.updateAgentConfig(lockedAgentId, {
             promptMode: mode
         });
 
@@ -322,9 +325,9 @@ class PromptManager {
         this.updateModeButtons();
         this.renderCurrentMode();
 
-        // 触发Agent设置的完整保存
+        // 触发Agent设置的完整保存（传入锁定的agentId）
         if (window.settingsManager && typeof window.settingsManager.triggerAgentSave === 'function') {
-            await window.settingsManager.triggerAgentSave();
+            await window.settingsManager.triggerAgentSave(lockedAgentId);
         }
     }
 

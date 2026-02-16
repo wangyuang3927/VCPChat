@@ -24,7 +24,7 @@ class AgentConfigManager extends EventEmitter {
     async acquireLock(agentId, timeout = 5000) {
         const { lockFile } = this.getAgentPaths(agentId);
         const startTime = Date.now();
-        
+
         while (true) {
             try {
                 // 使用 'wx' 标志进行原子性写入，如果文件已存在则会抛出错误
@@ -35,7 +35,7 @@ class AgentConfigManager extends EventEmitter {
                     // 锁文件已存在，检查是否超时
                     if (Date.now() - startTime > timeout) {
                         console.warn(`Agent ${agentId} lock acquisition timeout, removing stale lock`);
-                        await fs.remove(lockFile).catch(() => {});
+                        await fs.remove(lockFile).catch(() => { });
                         // 继续循环尝试重新创建
                     } else {
                         // 等待一段时间后重试
@@ -51,55 +51,74 @@ class AgentConfigManager extends EventEmitter {
 
     async releaseLock(agentId) {
         const { lockFile } = this.getAgentPaths(agentId);
-        await fs.remove(lockFile).catch(() => {});
+        await fs.remove(lockFile).catch(() => { });
     }
 
-    async readAgentConfig(agentId) {
+    async readAgentConfig(agentId, { allowDefault = false } = {}) {
         const { configPath } = this.getAgentPaths(agentId);
-        
+
         try {
             // 使用缓存机制减少文件读取
             const stats = await fs.stat(configPath).catch(() => null);
             const cacheKey = agentId;
             const cachedConfig = this.caches.get(cacheKey);
             const cacheTimestamp = this.cacheTimestamps.get(cacheKey) || 0;
-            
+
             if (stats && cachedConfig && stats.mtimeMs <= cacheTimestamp) {
                 return { ...cachedConfig };
             }
 
             const content = await fs.readFile(configPath, 'utf8');
             const config = JSON.parse(content);
-            
+
             // 更新缓存
             this.caches.set(cacheKey, config);
             this.cacheTimestamps.set(cacheKey, stats ? stats.mtimeMs : Date.now());
-            
+
             return { ...config };
         } catch (error) {
             if (error.code === 'ENOENT') {
-                // 检查是否是因为文件正在被移动（原子性替换过程中）
-                // 如果文件不存在，我们稍微等待一下再试一次，以防正处于 move 操作的瞬间
-                await new Promise(resolve => setTimeout(resolve, 50));
-                if (await fs.pathExists(configPath)) {
-                    return await this.readAgentConfig(agentId);
+                // 文件可能正处于原子性替换（fs.move）的瞬间，使用指数退避重试
+                const retryDelays = [50, 100, 200];
+                for (const delay of retryDelays) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    if (await fs.pathExists(configPath)) {
+                        try {
+                            return await this.readAgentConfig(agentId, { allowDefault });
+                        } catch (retryError) {
+                            // 重试也失败，继续下一次尝试
+                            console.warn(`Agent ${agentId} config retry failed (delay=${delay}ms):`, retryError.message);
+                        }
+                    }
                 }
 
-                // 确实不存在，返回默认配置
-                const defaultConfig = {
-                    name: agentId,
-                    systemPrompt: `你是 ${agentId}。`,
-                    model: 'gemini-2.5-flash-preview-05-20',
-                    temperature: 0.7,
-                    contextTokenLimit: 1000000,
-                    maxOutputTokens: 60000,
-                    topics: [{ id: "default", name: "主要对话", createdAt: Date.now() }]
-                };
-                return { ...defaultConfig };
+                // 所有重试都失败后，优先返回缓存数据
+                const cachedConfig = this.caches.get(agentId);
+                if (cachedConfig) {
+                    console.warn(`Agent ${agentId} config file not found after retries, using cached data`);
+                    return { ...cachedConfig };
+                }
+
+                // 仅在明确允许的场景（如新建Agent）才返回默认配置
+                if (allowDefault) {
+                    const defaultConfig = {
+                        name: agentId,
+                        systemPrompt: `你是 ${agentId}。`,
+                        model: 'gemini-2.5-flash-preview-05-20',
+                        temperature: 0.7,
+                        contextTokenLimit: 1000000,
+                        maxOutputTokens: 60000,
+                        topics: [{ id: "default", name: "主要对话", createdAt: Date.now() }]
+                    };
+                    return { ...defaultConfig };
+                }
+
+                // 严禁悄悄返回默认配置，抛出错误以防止覆盖用户数据
+                throw new Error(`Agent config for ${agentId} not found after retries and no cache available`);
             }
-            
+
             console.error(`Error reading agent ${agentId} config, attempting recovery:`, error);
-            
+
             // 尝试从备份恢复
             const backupPath = configPath + '.backup';
             if (await fs.pathExists(backupPath)) {
@@ -124,7 +143,14 @@ class AgentConfigManager extends EventEmitter {
                     console.error(`Agent ${agentId} backup also corrupted:`, backupError);
                 }
             }
-            
+
+            // 最后尝试缓存
+            const cachedConfig = this.caches.get(agentId);
+            if (cachedConfig) {
+                console.warn(`Agent ${agentId} config corrupted, falling back to cached data`);
+                return { ...cachedConfig };
+            }
+
             // 如果主文件损坏且没有有效的备份，抛出错误以防止覆盖
             throw new Error(`Agent config for ${agentId} corrupted and no valid backup found: ${error.message}`);
         }
@@ -134,40 +160,41 @@ class AgentConfigManager extends EventEmitter {
         const { agentPath, configPath } = this.getAgentPaths(agentId);
         const tempFile = configPath + '.tmp';
         const backupFile = configPath + '.backup';
-        
+
         try {
             // 确保agent目录存在
             await fs.ensureDir(agentPath);
-            
+
             // 写入临时文件
             await fs.writeJson(tempFile, config, { spaces: 2 });
-            
+
             // 验证临时文件
             const verifyContent = await fs.readFile(tempFile, 'utf8');
             JSON.parse(verifyContent);
-            
+
             // 创建备份（如果原文件存在）
             if (await fs.pathExists(configPath)) {
                 await fs.copy(configPath, backupFile, { overwrite: true });
             }
-            
+
             // 原子性替换
             await fs.move(tempFile, configPath, { overwrite: true });
-            
-            // 更新缓存
+
+            // 更新缓存（使用实际文件的修改时间，而非 Date.now()，确保与 readAgentConfig 的 stat 比较一致）
+            const newStats = await fs.stat(configPath).catch(() => null);
             this.caches.set(agentId, { ...config });
-            this.cacheTimestamps.set(agentId, Date.now());
-            
+            this.cacheTimestamps.set(agentId, newStats ? newStats.mtimeMs : Date.now());
+
             // 触发更新事件
             this.emit('agent-config-updated', agentId, config);
-            
+
             return true;
         } catch (error) {
             console.error(`Error writing agent ${agentId} config:`, error);
-            
+
             // 清理临时文件
-            await fs.remove(tempFile).catch(() => {});
-            
+            await fs.remove(tempFile).catch(() => { });
+
             throw error;
         }
     }
@@ -178,7 +205,7 @@ class AgentConfigManager extends EventEmitter {
             if (!this.queues.has(agentId)) {
                 this.queues.set(agentId, []);
             }
-            
+
             this.queues.get(agentId).push({ updater, resolve, reject });
             this.processQueue(agentId);
         });
@@ -195,21 +222,21 @@ class AgentConfigManager extends EventEmitter {
 
         try {
             await this.acquireLock(agentId);
-            
+
             const currentConfig = await this.readAgentConfig(agentId);
-            const newConfig = typeof updater === 'function' 
+            const newConfig = typeof updater === 'function'
                 ? await updater(currentConfig)
                 : { ...currentConfig, ...updater };
-            
+
             await this.writeAgentConfig(agentId, newConfig);
-            
+
             resolve({ success: true, config: newConfig });
         } catch (error) {
             reject(error);
         } finally {
             await this.releaseLock(agentId);
             this.processing.set(agentId, false);
-            
+
             // 继续处理队列
             if (queue.length > 0) {
                 setImmediate(() => this.processQueue(agentId));
@@ -226,7 +253,7 @@ class AgentConfigManager extends EventEmitter {
                     try {
                         const lockContent = await fs.readFile(lockFile, 'utf8');
                         const [pid, timestamp] = lockContent.split('-');
-                        
+
                         // 如果锁文件超过10秒，认为是过期的
                         if (Date.now() - parseInt(timestamp) > 10000) {
                             console.log(`Removing stale lock file for agent ${agentId}`);

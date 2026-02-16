@@ -331,9 +331,13 @@ function initialize(context) {
             // 1. 获取 Agent 名称
             let agentConfig = {};
             try {
-                const configPath = path.join(agentDir, 'config.json');
-                if (await fs.pathExists(configPath)) {
-                    agentConfig = await fs.readJson(configPath);
+                if (agentConfigManager) {
+                    agentConfig = await agentConfigManager.readAgentConfig(agentId, { allowDefault: true });
+                } else {
+                    const configPath = path.join(agentDir, 'config.json');
+                    if (await fs.pathExists(configPath)) {
+                        agentConfig = await fs.readJson(configPath);
+                    }
                 }
             } catch (e) {
                 console.warn(`无法读取Agent ${agentId} 的配置以获取名称:`, e);

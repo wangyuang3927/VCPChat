@@ -27,12 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const diffViewContainer = document.getElementById('diff-view');
     const acceptChangesBtn = document.getElementById('accept-changes-btn');
     const rejectChangesBtn = document.getElementById('reject-changes-btn');
+    const canvasSearchInput = document.getElementById('canvasSearchInput');
 
     let editor;
     let externalFileContent = null; // To store content from AI
     let diffView = null;
     const editorContextMenu = document.getElementById('editor-context-menu');
     let filesHistory = {}; // Object to store history arrays, keyed by file path
+    let allCanvasFiles = []; // Store all files for filtering
 
     // --- CodeMirror 5 Initialization ---
     function initializeEditor(initialData) {
@@ -568,8 +570,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateHistoryList(history) {
+        allCanvasFiles = history; // Store the full list
+        renderHistoryList(history);
+    }
+
+    function renderHistoryList(files) {
         historyList.innerHTML = '';
-        history.forEach(item => {
+        files.forEach(item => {
             const li = document.createElement('li');
             li.textContent = item.title;
             li.dataset.path = item.path;
@@ -579,6 +586,34 @@ document.addEventListener('DOMContentLoaded', () => {
             historyList.appendChild(li);
         });
     }
+
+    canvasSearchInput.addEventListener('input', async () => {
+        const searchTerm = canvasSearchInput.value.toLowerCase().trim();
+        if (!searchTerm) {
+            renderHistoryList(allCanvasFiles);
+            return;
+        }
+
+        const filteredFiles = [];
+        for (const file of allCanvasFiles) {
+            // Search in title
+            if (file.title.toLowerCase().includes(searchTerm)) {
+                filteredFiles.push(file);
+                continue;
+            }
+
+            // Search in content (if we have it or can get it)
+            try {
+                const fileData = await window.electronAPI.getTextContent(file.path);
+                if (fileData && fileData.toLowerCase().includes(searchTerm)) {
+                    filteredFiles.push(file);
+                }
+            } catch (err) {
+                console.error(`Failed to search in file ${file.path}:`, err);
+            }
+        }
+        renderHistoryList(filteredFiles);
+    });
 
     // --- Document Change History Logic ---
     function addContentHistory(path, content, isInitial = false) {

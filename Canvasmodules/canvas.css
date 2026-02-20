@@ -146,6 +146,28 @@ body {
     margin-bottom: 10px;
 }
 
+.search-container {
+    padding: 0 8px;
+    margin-bottom: 10px;
+}
+
+#canvasSearchInput {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--primary-text);
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#canvasSearchInput:focus {
+    border-color: var(--accent-bg);
+}
+
 #historyList, #changeHistoryList {
     list-style: none;
     padding: 0;

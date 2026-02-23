@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-02-16T10:03:44.465Z",
+  "pluginName": "PTYShellExecutor",
+  "phase": "load",
+  "error": {
+    "name": "Error",
+    "message": "Cannot find module '@xterm/headless'\nRequire stack:\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin/PTYShellExecutor/PTYShellExecutor.impl.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin/PTYShellExecutor/PTYShellExecutor.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/VCPDistributedServer.js\n- /Users/jiaozi/Documents/vcp/VCPChat/main.js",
+    "stack": "Error: Cannot find module '@xterm/headless'\nRequire stack:\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin/PTYShellExecutor/PTYShellExecutor.impl.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin/PTYShellExecutor/PTYShellExecutor.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/Plugin.js\n- /Users/jiaozi/Documents/vcp/VCPChat/VCPDistributedServer/VCPDistributedServer.js\n- /Users/jiaozi/Documents/vcp/VCPChat/main.js\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1390:15)\n    at s._resolveFilename (node:electron/js2c/browser_init:2:129714)\n    at defaultResolveImpl (node:internal/modules/cjs/loader:1032:19)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1037:22)\n    at Module._load (node:internal/modules/cjs/loader:1199:37)\n    at c._load (node:electron/js2c/node_init:2:17993)\n    at TracingChannel.traceSync (node:diagnostics_channel:322:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:244:24)\n... [truncated, total 1118 chars]",
+    "code": "MODULE_NOT_FOUND"
+  },
+  "environment": {
+    "pid": 39687,
+    "platform": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "22.19.0",
+    "electronVersion": "37.5.1",
+    "modules": "136",
+    "v8Version": "13.8.258.32-electron.0",
+    "cwd": "/Users/jiaozi/Documents/vcp/VCPChat"
+  },
+  "context": {
+    "hint": "主体逻辑加载失败，可能是原生依赖(node-pty)缺失或版本不匹配",
+    "requirePath": "./PTYShellExecutor.impl"
+  }
+}

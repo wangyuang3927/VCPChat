@@ -36,7 +36,9 @@ contextBridge.exposeInMainWorld('electron', {
             'music-configure-optimizations',
             'music-configure-upsampling', // 新增：升频配置通道
             'music-get-lyrics', // 新增：获取歌词
-            'music-fetch-lyrics' // 新增：从网络获取歌词
+            'music-fetch-lyrics', // 新增：从网络获取歌词
+            'music-search-netease', // 网易云音乐搜索
+            'music-play-network-track' // 网易云音乐播放网络歌曲
         ];
         if (validChannels.includes(channel)) {
             return ipcRenderer.invoke(channel, data);

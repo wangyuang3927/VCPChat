@@ -1649,14 +1649,44 @@ body.light-theme option {
 }
 
 .modal-count {
-    font-size: 0.85em;
-    color: var(--music-text-secondary);
+font-size: 0.85em;
+color: var(--music-text-secondary);
 }
 
 /* 空状态 */
 .music-modal-empty {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--music-text-secondary);
-    font-size: 0.9em;
+padding: 40px 20px;
+text-align: center;
+color: var(--music-text-secondary);
+font-size: 0.9em;
+}
+
+/* --- 网易云网络搜索结果样式 --- */
+.playlist li.network-track {
+font-style: italic;
+color: var(--music-highlight);
+position: relative;
+padding-right: 40px;
+}
+
+.playlist li.network-track::after {
+content: '☁';
+position: absolute;
+right: 10px;
+top: 50%;
+transform: translateY(-50%);
+font-size: 0.8em;
+opacity: 0.6;
+}
+
+.playlist.network-results li:not(.network-track) {
+display: none;
+}
+
+.network-search-hint {
+text-align: center;
+padding: 8px;
+font-size: 0.8em;
+color: var(--music-text-secondary);
+opacity: 0.7;
 }

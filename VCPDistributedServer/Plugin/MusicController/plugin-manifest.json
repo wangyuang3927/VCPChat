@@ -16,7 +16,7 @@
     "invocationCommands": [
       {
         "command": "playSong",
-        "description": "功能: 根据提供的歌曲名称，在用户的播放列表中搜索并播放对应的歌曲。\n参数:\n- songname (字符串, 必需): 要播放的歌曲的准确标题或部分标题。\n- command (字符串, 可选): 此字段为可选，可以忽略。程序会自动识别意图。\n调用格式:\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」MusicController「末」,\ncommand:「始」playSong「末」,\nsongname:「始」星の余韻「末」\n<<<[END_TOOL_REQUEST]>>>"
+        "description": "功能: 根据提供的歌曲名称，在用户的**本地播放列表**中搜索并播放对应的歌曲。\n⚠️ 重要：此工具只能播放本地已存在的歌曲文件。如果本地没有该歌曲（返回 not found），请改用 Music163VCP 的 MusicSearch + MusicDownload 从网易云音乐在线搜索并下载。\n参数:\n- songname (字符串, 必需): 要播放的歌曲的准确标题或部分标题。\n- command (字符串, 可选): 此字段为可选，可以忽略。程序会自动识别意图。\n调用格式:\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」MusicController「末」,\ncommand:「始」playSong「末」,\nsongname:「始」星の余韻「末」\n<<<[END_TOOL_REQUEST]>>>"
       }
     ]
   }

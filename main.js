@@ -158,7 +158,8 @@ function startAudioEngine() {
         }
 
         // Use the Rust audio server binary (moved to audio_engine directory)
-        const rustBinaryPath = path.join(__dirname, 'audio_engine', 'audio_server.exe');
+        const binaryName = process.platform === 'win32' ? 'audio_server.exe' : 'audio_server';
+        const rustBinaryPath = path.join(__dirname, 'audio_engine', binaryName);
         console.log(`[Main] Starting Rust Audio Engine from: ${rustBinaryPath}`);
 
         // Check if the binary exists
@@ -190,7 +191,14 @@ function startAudioEngine() {
 
         audioEngineProcess.stderr.on('data', (data) => {
             const logLine = data.toString().trim();
-            if (logLine && !logLine.includes('GET /state HTTP/1.1')) {
+            // 过滤 actix 框架的噪音日志（状态轮询、无害的解析错误等）
+            const noisePatterns = [
+                'GET /state HTTP/1.1',
+                'invalid Header provided',
+                'request parse error',
+                'stream error:',
+            ];
+            if (logLine && !noisePatterns.some(p => logLine.includes(p))) {
                 console.error(`[AudioEngine STDERR]: ${logLine}`);
             }
         });

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VCP macOS Terminal</title>
+    <!-- 引入 xterm.js 的核心样式 -->
+    <link rel="stylesheet" href="../../../../node_modules/xterm/css/xterm.css" />
+    <!-- 静态链接所有主题定义 -->
+    <link rel="stylesheet" href="../../../../styles/themes.css">
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="TerminalViewer.css" />
+</head>
+<body>
+    <!-- macOS 标题栏区域（用于拖拽，红绿灯由系统原生渲染） -->
+    <div id="custom-title-bar">
+        <div class="title-text-container">
+            <span id="window-title-text" class="title">VCP macOS Terminal</span>
+        </div>
+    </div>
+
+    <!-- 内容包装器 -->
+    <div id="content-wrapper">
+        <!-- 静态字符画容器 -->
+        <pre id="ascii-art-container">
+   ███╗   ██╗ ██████╗ ██████╗ ██████╗  █████╗
+   ████╗  ██║██╔═══██╗██╔══██╗██╔══██╗██╔══██╗
+   ██╔██╗ ██║██║   ██║██████╔╝██║  ██║███████║
+   ██║╚██╗██║██║   ██║██╔══██╗██║  ██║██╔══██║
+   ██║ ╚████║╚██████╔╝██║  ██║██████╔╝██║  ██║
+   ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝
+         Welcome to V C P  •  macOS
+        </pre>
+        <!-- 终端容器 -->
+        <div id="terminal-container"></div>
+    </div>
+
+    <!-- 命令输入区域 -->
+    <div id="input-area">
+        <textarea id="command-input" placeholder="在这里输入命令... (Shift+Enter 换行)" rows="1"></textarea>
+        <button id="send-button">执行</button>
+    </div>
+
+    <!-- 引入 xterm.js 及其插件 -->
+    <script src="../../../../node_modules/xterm/lib/xterm.js"></script>
+    <script src="../../../../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+
+    <!-- 终端逻辑脚本 -->
+    <script src="TerminalViewer.js"></script>
+</body>
+</html>

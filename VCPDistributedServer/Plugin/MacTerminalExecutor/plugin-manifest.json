@@ -1,0 +1,25 @@
+{
+  "manifestVersion": "1.0.0",
+  "name": "MacTerminalExecutor",
+  "version": "1.0.0",
+  "displayName": "macOS 终端命令执行器",
+  "description": "允许AI在macOS上通过持久化的zsh会话执行命令并返回输出的插件。支持阻塞式执行、串行命令链、智能安全检查。提供GUI终端窗口，用户也可手动输入命令。",
+  "author": "VCP Team",
+  "pluginType": "hybridservice",
+  "entryPoint": {
+    "type": "nodejs",
+    "script": "MacTerminalExecutor.js"
+  },
+  "communication": {
+    "protocol": "direct",
+    "timeout": 600000
+  },
+  "capabilities": {
+    "invocationCommands": [
+      {
+        "commandIdentifier": "MacTerminalExecutor",
+        "description": "在一个持久化的macOS zsh会话中执行命令。此工具维护一个长期活动的终端窗口，允许连续操作。\n参数:\n- command (字符串, 必需): 要在zsh会话中执行的命令。支持串行调用(command1, command2...)。\n- newSession (布尔值, 可选): 如果为 true，将强制关闭当前会话并启动一个全新的会话。默认为 false。\n- returnMode (字符串, 可选): 控制返回内容的模式。'delta' (默认) 只返回最新命令的输出；'full' 返回整个终端窗口的当前内容。\n\n标准调用格式:\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」MacTerminalExecutor「末」,\ncommand:「始」cd ~/Desktop && ls -la「末」\n<<<[END_TOOL_REQUEST]>>>\n\n串行调用:\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」MacTerminalExecutor「末」,\ncommand1:「始」pwd「末」,\ncommand2:「始」ls -la「末」,\ncommand3:「始」df -h「末」\n<<<[END_TOOL_REQUEST]>>>\n\n启动新会话:\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」MacTerminalExecutor「末」,\ncommand:「始」echo $SHELL「末」,\nnewSession:「始」true「末」\n<<<[END_TOOL_REQUEST]>>>"
+      }
+    ]
+  }
+}

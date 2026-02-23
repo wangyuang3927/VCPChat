@@ -8,6 +8,11 @@ const lyricFetcher = require('../lyricFetcher'); // Import the new lyric fetcher
 const AUDIO_ENGINE_URL = 'http://127.0.0.1:63789';
 let fetch;
 
+// --- Netease Cloud Music API ---
+let neteaseApi = null;
+let NETEASE_COOKIE = '';
+let NETEASE_CACHE_DIR;
+
 let musicWindow = null;
 let currentSongInfo = null; // 保持这个变量，用于可能的UI状态同步
 let mainWindow = null; // To be initialized
@@ -173,9 +178,43 @@ async function handleMusicControl(args) {
 
                     // Play the track
                     return audioEngineApi('/play', 'POST');
-                } else {
-                    return { status: 'error', message: `Track '${target}' not found.` };
                 }
+
+                // Fallback: 在缓存目录中按文件名模糊搜索
+                console.log(`[MusicControl] Playlist miss for '${target}', entering fallback cache search...`);
+                const cacheDirs = [NETEASE_CACHE_DIR];
+                // Music163VCP 插件缓存目录
+                const music163CacheDir = path.resolve(__dirname, '..', '..', '..', 'VCPToolBox', 'Plugin', 'Music163VCP', 'cache');
+                console.log(`[MusicControl] music163CacheDir: ${music163CacheDir}, exists: ${await fs.pathExists(music163CacheDir)}`);
+                if (await fs.pathExists(music163CacheDir)) cacheDirs.push(music163CacheDir);
+                console.log(`[MusicControl] cacheDirs: ${JSON.stringify(cacheDirs)}`);
+
+                const audioExts = ['.flac', '.mp3', '.wav', '.ogg', '.m4a', '.aac'];
+                const targetLower = target.toLowerCase();
+                // 将搜索词拆分为关键词（按空格、-、_ 分割，过滤空串）
+                const targetKeywords = targetLower.split(/[\s\-_]+/).filter(Boolean);
+                for (const dir of cacheDirs) {
+                    if (!await fs.pathExists(dir)) continue;
+                    const files = await fs.readdir(dir);
+                    const match = files.find(f => {
+                        const ext = path.extname(f).toLowerCase();
+                        if (!audioExts.includes(ext)) return false;
+                        const name = path.basename(f, ext).toLowerCase();
+                        // 所有关键词都出现在文件名中即匹配
+                        return targetKeywords.every(kw => name.includes(kw));
+                    });
+                    if (match) {
+                        const filePath = path.join(dir, match);
+                        const fallbackTrack = { title: path.basename(match, path.extname(match)), path: filePath, artist: '' };
+                        await audioEngineApi('/load', 'POST', { path: filePath });
+                        if (musicWindow && !musicWindow.isDestroyed()) {
+                            musicWindow.webContents.send('music-set-track', fallbackTrack);
+                        }
+                        return audioEngineApi('/play', 'POST');
+                    }
+                }
+
+                return { status: 'error', message: `Track '${target}' not found.` };
             } else {
                 return audioEngineApi('/play', 'POST');
             }
@@ -198,6 +237,35 @@ function initialize(options) {
     MUSIC_PLAYLIST_FILE = path.join(APP_DATA_ROOT_IN_PROJECT, 'songlist.json');
     MUSIC_COVER_CACHE_DIR = path.join(APP_DATA_ROOT_IN_PROJECT, 'MusicCoverCache');
     LYRIC_DIR = path.join(APP_DATA_ROOT_IN_PROJECT, 'lyric');
+    NETEASE_CACHE_DIR = path.join(APP_DATA_ROOT_IN_PROJECT, 'NeteaseCache');
+
+    // --- Initialize Netease API ---
+    try {
+        const apiEnhancedPath = path.join(__dirname, '..', '..', 'Musicmodules', 'api-enhanced');
+        if (fs.existsSync(apiEnhancedPath)) {
+            neteaseApi = require(apiEnhancedPath);
+            console.log('[Music] NeteaseCloudMusicApiEnhanced loaded successfully.');
+        } else {
+            console.warn('[Music] api-enhanced not found. Netease features disabled.');
+        }
+    } catch (err) {
+        console.error('[Music] Failed to load NeteaseCloudMusicApiEnhanced:', err.message);
+    }
+
+    // --- Load Netease Cookie from config.env ---
+    try {
+        const configEnvPath = path.join(__dirname, '..', '..', 'Musicmodules', 'config.env');
+        if (fs.existsSync(configEnvPath)) {
+            const envContent = fs.readFileSync(configEnvPath, 'utf-8');
+            const cookieMatch = envContent.match(/^NETEASE_COOKIE\s*=\s*["']?(.+?)["']?\s*$/m);
+            if (cookieMatch) {
+                NETEASE_COOKIE = cookieMatch[1];
+                console.log('[Music] Netease cookie loaded from config.env.');
+            }
+        }
+    } catch (err) {
+        console.warn('[Music] Failed to load Netease cookie:', err.message);
+    }
 
     const registerIpcHandlers = () => {
         ipcMain.on('open-music-window', async () => {
@@ -442,6 +510,95 @@ function initialize(options) {
             } catch (error) {
                 console.error(`[Music] Error fetching lyrics via IPC for "${title}":`, error);
                 return null;
+            }
+        });
+
+        // --- Netease Cloud Music IPC Handlers ---
+        ipcMain.handle('music-search-netease', async (event, { query }) => {
+            if (!neteaseApi) {
+                return { status: 'error', message: 'Netease API not available.' };
+            }
+            try {
+                console.log(`[Music] Netease search: "${query}"`);
+                const result = await neteaseApi.cloudsearch({
+                    keywords: query,
+                    limit: 20,
+                    type: 1,
+                    cookie: NETEASE_COOKIE,
+                });
+                if (result.status === 200 && result.body?.result?.songs) {
+                    const tracks = result.body.result.songs.map(song => ({
+                        networkId: song.id,
+                        title: song.name,
+                        artist: (song.ar || []).map(a => a.name).join(' / '),
+                        album: song.al?.name || '',
+                        albumArt: song.al?.picUrl || '',
+                        duration: song.dt ? song.dt / 1000 : 0,
+                    }));
+                    return { status: 'success', tracks };
+                }
+                return { status: 'error', message: 'No results found.' };
+            } catch (error) {
+                console.error('[Music] Netease search error:', error.message);
+                return { status: 'error', message: error.message };
+            }
+        });
+
+        ipcMain.handle('music-play-network-track', async (event, trackInfo) => {
+            if (!neteaseApi) {
+                return { status: 'error', message: 'Netease API not available.' };
+            }
+            try {
+                const { networkId, title, artist, albumArt } = trackInfo;
+                console.log(`[Music] Fetching stream URL for network track: ${networkId} (${title})`);
+
+                await fs.ensureDir(NETEASE_CACHE_DIR);
+                const cachedPath = path.join(NETEASE_CACHE_DIR, `${networkId}.mp3`);
+
+                // Check cache first
+                if (await fs.pathExists(cachedPath)) {
+                    console.log(`[Music] Cache hit for ${networkId}`);
+                    const localTrack = { path: cachedPath, title, artist, album: trackInfo.album || '', albumArt, networkId, source: 'netease' };
+                    if (musicWindow && !musicWindow.isDestroyed()) {
+                        musicWindow.webContents.send('music-set-track', localTrack);
+                    }
+                    return { status: 'success' };
+                }
+
+                // Fetch stream URL
+                const urlResult = await neteaseApi.song_url_v1({
+                    id: networkId,
+                    level: 'exhigh',
+                    cookie: NETEASE_COOKIE,
+                });
+
+                const songData = urlResult.body?.data?.[0];
+                if (!songData?.url) {
+                    return { status: 'error', message: 'Failed to get stream URL. Song may require VIP or is region-locked.' };
+                }
+
+                // Download and cache
+                if (!fetch) {
+                    const mod = await import('node-fetch');
+                    fetch = mod.default;
+                }
+                console.log(`[Music] Downloading: ${songData.url.substring(0, 80)}...`);
+                const response = await fetch(songData.url);
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.status}`);
+                }
+                const buffer = await response.buffer();
+                await fs.writeFile(cachedPath, buffer);
+                console.log(`[Music] Cached to: ${cachedPath} (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`);
+
+                const localTrack = { path: cachedPath, title, artist, album: trackInfo.album || '', albumArt, networkId, source: 'netease' };
+                if (musicWindow && !musicWindow.isDestroyed()) {
+                    musicWindow.webContents.send('music-set-track', localTrack);
+                }
+                return { status: 'success' };
+            } catch (error) {
+                console.error('[Music] Network track play error:', error.message);
+                return { status: 'error', message: error.message };
             }
         });
     };

@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTrackIndex = 0;
     let isPlaying = false; // 本地UI状态，会与引擎同步
     const playModes = ['repeat', 'repeat-one', 'shuffle'];
+    let currentNetworkSearchResults = []; // Stores the last network search results
+    let isNetworkSearchMode = false; // Whether we are showing network results
     let currentPlayMode = 0;
     let currentTheme = 'dark';
     let currentLyrics = [];
@@ -866,8 +868,28 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     playlistEl.addEventListener('click', (e) => {
-        if (e.target.tagName === 'LI') {
-            const index = parseInt(e.target.dataset.index, 10);
+        const li = e.target.closest('li');
+        if (!li) return;
+        // Handle network track click
+        if (li.dataset.networkId && window.electron) {
+            const networkId = parseInt(li.dataset.networkId, 10);
+            const networkTrack = currentNetworkSearchResults.find(t => t.networkId === networkId);
+            if (networkTrack) {
+                console.log('[Music] Playing network track:', networkTrack.title);
+                window.electron.invoke('music-play-network-track', {
+                    networkId: networkTrack.networkId,
+                    title: networkTrack.title,
+                    artist: networkTrack.artist,
+                    album: networkTrack.album,
+                    albumArt: networkTrack.albumArt,
+                    source: 'netease',
+                });
+            }
+            return;
+        }
+        // Handle local track click
+        if (li.dataset.index !== undefined) {
+            const index = parseInt(li.dataset.index, 10);
             // Reset shuffle queue on manual selection to start a new sequence from this song
             shuffleQueue = [];
             loadTrack(index);
@@ -875,13 +897,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const filteredPlaylist = playlist.filter(track =>
-            (track.title || '').toLowerCase().includes(searchTerm) ||
-            (track.artist || '').toLowerCase().includes(searchTerm) ||
-            (track.album || '').toLowerCase().includes(searchTerm)
-        );
-        renderPlaylist(filteredPlaylist);
+        const searchTerm = e.target.value;
+        // ':' prefix triggers network search
+        if (searchTerm.startsWith(':') && searchTerm.length > 1 && window.electron) {
+            const query = searchTerm.substring(1).trim();
+            if (query.length < 2) return;
+            // Debounce network search
+            clearTimeout(searchInput._neteaseTimer);
+            searchInput._neteaseTimer = setTimeout(async () => {
+                playlistEl.classList.add('network-results');
+                isNetworkSearchMode = true;
+                const result = await window.electron.invoke('music-search-netease', { query });
+                if (result && result.status === 'success' && result.tracks) {
+                    currentNetworkSearchResults = result.tracks;
+                    renderNetworkResults(result.tracks);
+                } else {
+                    currentNetworkSearchResults = [];
+                    playlistEl.innerHTML = '<li class="network-search-hint">' + (result?.message || '未找到结果') + '</li>';
+                }
+            }, 400);
+        } else if (searchTerm.startsWith(':')) {
+            // Just ':' typed, show hint
+            playlistEl.classList.add('network-results');
+            isNetworkSearchMode = true;
+            playlistEl.innerHTML = '<li class="network-search-hint">输入关键词搜索网易云音乐...</li>';
+        } else {
+            // Local search
+            if (isNetworkSearchMode) {
+                playlistEl.classList.remove('network-results');
+                isNetworkSearchMode = false;
+                currentNetworkSearchResults = [];
+            }
+            const term = searchTerm.toLowerCase();
+            const filteredPlaylist = playlist.filter(track =>
+                (track.title || '').toLowerCase().includes(term) ||
+                (track.artist || '').toLowerCase().includes(term) ||
+                (track.album || '').toLowerCase().includes(term)
+            );
+            renderPlaylist(filteredPlaylist);
+        }
     });
 
     window.addEventListener('resize', () => {
@@ -1135,6 +1189,14 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electron.send('open-music-folder');
         });
 
+        // Right-click on add button: switch to network search mode
+        addFolderBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            searchInput.value = ':';
+            searchInput.focus();
+            searchInput.dispatchEvent(new Event('input'));
+        });
+
         let totalFilesToScan = 0, filesScanned = 0;
         window.electron.on('scan-started', ({ total }) => {
             totalFilesToScan = total;
@@ -1171,15 +1233,26 @@ document.addEventListener('DOMContentLoaded', () => {
             // You can display this error to the user, e.g., in a toast notification
         });
 
-        // Listen for track changes from the main process (e.g., from AI control)
+        // Listen for track changes from the main process (e.g., from AI control or network track download)
         window.electron.on('music-set-track', (track) => {
+            // Exit network search mode if active
+            if (isNetworkSearchMode) {
+                isNetworkSearchMode = false;
+                currentNetworkSearchResults = [];
+                playlistEl.classList.remove('network-results');
+                searchInput.value = '';
+            }
+
             if (!playlist.some(t => t.path === track.path)) {
                 playlist.unshift(track); // Add to playlist if not already there
             }
             const trackIndex = playlist.findIndex(t => t.path === track.path);
             if (trackIndex !== -1) {
                 shuffleQueue = []; // Reset shuffle on external track change
+                renderPlaylist();
                 loadTrack(trackIndex, true); // Load and play the track
+                // Save playlist with the new network track included
+                window.electron.send('save-music-playlist', playlist);
             }
         });
     };
@@ -1196,6 +1269,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (originalIndex === currentTrackIndex) {
                 li.classList.add('active');
             }
+            fragment.appendChild(li);
+        });
+        playlistEl.appendChild(fragment);
+    };
+
+    const renderNetworkResults = (tracks) => {
+        playlistEl.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        tracks.forEach((track) => {
+            const li = document.createElement('li');
+            li.classList.add('network-track');
+            li.dataset.networkId = track.networkId;
+            li.textContent = `${track.title} - ${track.artist}`;
             fragment.appendChild(li);
         });
         playlistEl.appendChild(fragment);

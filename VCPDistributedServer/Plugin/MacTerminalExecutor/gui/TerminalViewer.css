@@ -1,0 +1,170 @@
+/* TerminalViewer.css - MacTerminalExecutor */
+
+/* 全局样式重置 */
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100%;
+    background-color: var(--primary-bg, #1e1e2e);
+    color: var(--primary-text, #cdd6f4);
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+/* --- macOS 标题栏（用于拖拽，红绿灯由系统渲染） --- */
+#custom-title-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 38px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    -webkit-app-region: drag;
+    user-select: none;
+}
+
+.title-text-container {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#custom-title-bar .title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary-text);
+    opacity: 0.6;
+}
+
+/* --- 内容包装器，磨砂玻璃效果 --- */
+#content-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--chat-bubble-border-radius, 10px);
+    background-color: var(--panel-bg);
+    -webkit-backdrop-filter: blur(15px);
+    backdrop-filter: blur(15px);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-height: 0;
+    margin: 38px 10px 0 10px;
+}
+
+/* --- 静态字符画样式 --- */
+#ascii-art-container {
+    color: var(--highlight-text, #89b4fa);
+    font-family: Menlo, Monaco, 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.1;
+    text-align: center;
+    padding: 20px 10px 5px 10px;
+    margin: 0;
+    white-space: pre;
+    background-color: transparent;
+    flex-shrink: 0;
+}
+
+/* 终端容器样式 */
+#terminal-container {
+    width: 100%;
+    flex-grow: 1;
+    padding: 0 10px 0 10px;
+    box-sizing: border-box;
+    min-height: 0;
+}
+
+/* xterm.js 终端样式覆盖 */
+.xterm {
+    padding: 0 15px 15px 15px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.xterm .xterm-viewport {
+    flex-grow: 1;
+    background-color: transparent !important;
+}
+
+/* macOS 风格滚动条 */
+.xterm .xterm-viewport::-webkit-scrollbar {
+    width: 8px;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+    background-color: var(--accent-bg, #45475a);
+    border-radius: 4px;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background-color: var(--highlight-text, #89b4fa);
+}
+
+/* --- 输入区域样式 --- */
+#input-area {
+    display: flex;
+    padding: 8px;
+    margin: 10px;
+    flex-shrink: 0;
+    border-radius: var(--chat-bubble-border-radius, 10px);
+    background-color: var(--panel-bg);
+    -webkit-backdrop-filter: blur(15px);
+    backdrop-filter: blur(15px);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+#command-input {
+    flex-grow: 1;
+    background-color: transparent;
+    color: var(--primary-text, #cdd6f4);
+    border: 1px solid var(--border-color, #45475a);
+    padding: 10px;
+    font-family: Menlo, Monaco, 'Courier New', monospace;
+    font-size: 14px;
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.2s ease-in-out;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.4;
+}
+
+#command-input:focus {
+    border-color: var(--highlight-text, #89b4fa);
+}
+
+#send-button {
+    background-color: var(--button-bg, #89b4fa);
+    color: var(--text-on-accent, #1e1e2e);
+    border: none;
+    padding: 10px 20px;
+    margin-left: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#send-button:hover {
+    background-color: var(--button-hover-bg, #a6c8ff);
+}
+
+#send-button:active {
+    background-color: var(--button-bg, #6c98e6);
+}
